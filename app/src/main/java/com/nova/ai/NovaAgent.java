@@ -4,21 +4,25 @@ import android.content.Context;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Lightweight local agent loop. Planning is deterministic and permission-aware; model providers can be attached later. */
+/** Local agent loop: context -> deterministic plan -> registered tool execution. */
 public final class NovaAgent {
     public interface Callback { void onComplete(JSONObject result); }
 
-    private final Context context;
-    private final NovaRuntime runtime;
+    private final NovaContextStore contextStore;
+    private final NovaToolRegistry registry;
+    private final NovaToolExecutor executor;
 
     public NovaAgent(Context context) {
-        this.context = context.getApplicationContext();
-        this.runtime = NovaRuntime.get(this.context);
+        Context app = context.getApplicationContext();
+        contextStore = new NovaContextStore(app);
+        registry = new NovaToolRegistry();
+        registry.register(NovaBuiltInTools.echo());
+        registry.register(NovaBuiltInTools.contextAppend(app));
+        executor = new NovaToolExecutor(registry);
     }
 
     public void handle(String request, Callback callback) {
-        JSONObject plan = plan(request);
-        JSONObject result = execute(plan);
+        JSONObject result = execute(plan(request));
         if (callback != null) callback.onComplete(result);
     }
 
@@ -30,27 +34,14 @@ public final class NovaAgent {
             plan.put("id", NovaProtocol.id());
             plan.put("request", text);
             plan.put("steps", steps);
-            if (text.isEmpty()) {
-                plan.put("status", "invalid");
-                return plan;
-            }
-            String lower = text.toLowerCase();
-            if (lower.startsWith("open ")) {
-                JSONObject step = new JSONObject();
-                step.put("tool", "android.open_app");
-                step.put("target", text.substring(5).trim());
-                steps.put(step);
-            } else if (lower.contains("remember")) {
-                JSONObject step = new JSONObject();
-                step.put("tool", "memory.store");
-                step.put("value", text);
-                steps.put(step);
-            } else {
-                JSONObject step = new JSONObject();
-                step.put("tool", "assistant.respond");
-                step.put("value", text);
-                steps.put(step);
-            }
+            if (text.isEmpty()) { plan.put("status", "invalid"); return plan; }
+
+            // Until an LLM provider is attached, keep planning deterministic and safe.
+            JSONObject step = new JSONObject();
+            step.put("id", NovaProtocol.id());
+            step.put("tool", "nova.echo");
+            step.put("input", new JSONObject().put("text", text));
+            steps.put(step);
             plan.put("status", "planned");
         } catch (Exception ignored) { }
         return plan;
@@ -58,14 +49,29 @@ public final class NovaAgent {
 
     private JSONObject execute(JSONObject plan) {
         JSONObject result = new JSONObject();
+        JSONArray outputs = new JSONArray();
         try {
+            String status = plan.optString("status", "unknown");
             result.put("planId", plan.optString("id"));
-            result.put("status", plan.optString("status", "unknown"));
-            result.put("steps", plan.optJSONArray("steps"));
+            result.put("status", status);
             result.put("executed", false);
-            // Execution is deliberately delegated to NovaActionEngine/approved tools.
-            // This keeps the planner from gaining unrestricted device access.
-        } catch (Exception ignored) { }
+            if (!"planned".equals(status)) return result;
+
+            JSONArray steps = plan.optJSONArray("steps");
+            if (steps != null) {
+                for (int i = 0; i < steps.length(); i++) {
+                    JSONObject step = steps.optJSONObject(i);
+                    if (step == null) continue;
+                    NovaToolCall call = NovaToolCall.fromJson(step);
+                    outputs.put(executor.execute(call.tool, call.input));
+                }
+            }
+            contextStore.add("user", plan.optString("request"));
+            result.put("outputs", outputs);
+            result.put("executed", true);
+        } catch (Exception e) {
+            try { result.put("error", e.getClass().getSimpleName()); } catch (Exception ignored) { }
+        }
         return result;
     }
 }
