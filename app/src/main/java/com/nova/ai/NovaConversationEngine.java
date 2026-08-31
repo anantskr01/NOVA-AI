@@ -4,7 +4,7 @@ import android.content.Context;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Coordinates provider-backed conversations while preserving the local tool authorization boundary. */
+/** Coordinates provider-backed conversations using the runtime's shared capability registry. */
 public final class NovaConversationEngine {
     private final NovaContextStore contextStore;
     private final NovaToolRegistry registry;
@@ -14,9 +14,8 @@ public final class NovaConversationEngine {
     public NovaConversationEngine(Context context) {
         Context app = context.getApplicationContext();
         contextStore = new NovaContextStore(app);
-        registry = new NovaToolRegistry();
-        registry.register(NovaBuiltInTools.echo());
-        registry.register(NovaBuiltInTools.contextAppend(app));
+        NovaRuntime runtime = NovaRuntime.get(app);
+        registry = runtime.tools();
         fallbackAgent = new NovaAgent(app);
     }
 
