@@ -1,14 +1,18 @@
 package com.nova.ai;
 
+import android.content.Context;
 import org.json.JSONObject;
 
-/** Executes only registered capabilities and returns structured results. */
+/** Executes only registered capabilities after an explicit authorization check. */
 public final class NovaToolExecutor {
     private final NovaToolRegistry registry;
+    private final NovaAuthorization authorization;
 
-    public NovaToolExecutor(NovaToolRegistry registry) {
+    public NovaToolExecutor(Context context, NovaToolRegistry registry) {
+        if (context == null) throw new IllegalArgumentException("context");
         if (registry == null) throw new IllegalArgumentException("registry");
         this.registry = registry;
+        this.authorization = new NovaAuthorization(context);
     }
 
     public JSONObject execute(String toolId, JSONObject input) {
@@ -18,6 +22,12 @@ public final class NovaToolExecutor {
             if (tool == null) {
                 result.put("ok", false);
                 result.put("error", "tool_not_found");
+                return result;
+            }
+            if (!authorization.isAllowed(toolId)) {
+                result.put("ok", false);
+                result.put("error", "capability_not_authorized");
+                result.put("tool", toolId);
                 return result;
             }
             JSONObject output = tool.execute(input == null ? new JSONObject() : input);
