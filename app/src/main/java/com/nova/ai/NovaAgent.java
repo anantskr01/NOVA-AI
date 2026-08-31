@@ -4,7 +4,7 @@ import android.content.Context;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Local agent loop: context -> deterministic plan -> registered tool execution. */
+/** Local agent loop: context -> deterministic plan -> authorized tool execution. */
 public final class NovaAgent {
     public interface Callback { void onComplete(JSONObject result); }
 
@@ -18,7 +18,7 @@ public final class NovaAgent {
         registry = new NovaToolRegistry();
         registry.register(NovaBuiltInTools.echo());
         registry.register(NovaBuiltInTools.contextAppend(app));
-        executor = new NovaToolExecutor(registry);
+        executor = new NovaToolExecutor(app, registry);
     }
 
     public void handle(String request, Callback callback) {
@@ -36,7 +36,6 @@ public final class NovaAgent {
             plan.put("steps", steps);
             if (text.isEmpty()) { plan.put("status", "invalid"); return plan; }
 
-            // Until an LLM provider is attached, keep planning deterministic and safe.
             JSONObject step = new JSONObject();
             step.put("id", NovaProtocol.id());
             step.put("tool", "nova.echo");
