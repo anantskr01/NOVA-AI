@@ -1,0 +1,2 @@
+# NOVA-AI
+AN APP LIKE AI
