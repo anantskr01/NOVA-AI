@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">NOVA AI</string>
+    <string name="accessibility_description">NOVA uses accessibility to understand and control supported Android UI actions.</string>
+</resources>
