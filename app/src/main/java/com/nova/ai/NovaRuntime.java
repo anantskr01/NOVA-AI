@@ -9,6 +9,7 @@ public final class NovaRuntime {
     private final Context context;
     private final NovaMemory memory;
     private final NovaLongTermMemory longTermMemory;
+    private final NovaMemoryManager memoryManager;
     private final NovaActionEngine actions;
     private final NovaToolRegistry tools;
     private final NovaToolExecutor executor;
@@ -19,6 +20,7 @@ public final class NovaRuntime {
         this.context = context.getApplicationContext();
         this.memory = new NovaMemory(this.context);
         this.longTermMemory = new NovaLongTermMemory(this.context);
+        this.memoryManager = new NovaMemoryManager(this.context);
         this.actions = new NovaActionEngine(this.context);
         this.tools = new NovaToolRegistry();
         registerBuiltIns();
@@ -30,8 +32,9 @@ public final class NovaRuntime {
         tools.register(NovaBuiltInTools.contextAppend(context));
         tools.register(new NovaDeviceInfoTool());
         tools.register(new NovaAppLauncherTool(context));
-        tools.register(NovaMemoryTools.remember(context));
-        tools.register(NovaMemoryTools.recall(context));
+        tools.register(NovaMemoryToolsV2.remember(context));
+        tools.register(NovaMemoryToolsV2.recall(context));
+        tools.register(NovaMemoryToolsV2.forget(context));
         tools.register(new NovaAndroidActionTool(context));
         tools.register(new NovaWebTool(context));
     }
@@ -43,6 +46,7 @@ public final class NovaRuntime {
     }
     public NovaMemory memory() { return memory; }
     public NovaLongTermMemory longTermMemory() { return longTermMemory; }
+    public NovaMemoryManager memoryManager() { return memoryManager; }
     public NovaActionEngine actions() { return actions; }
     public NovaToolRegistry tools() { return tools; }
     public NovaToolExecutor executor() { return executor; }
