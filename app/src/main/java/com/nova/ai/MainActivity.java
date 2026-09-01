@@ -8,6 +8,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import org.json.JSONException;
 
 /** Initial NOVA control surface: conversation entry plus runtime status. */
 public final class MainActivity extends Activity {
@@ -43,7 +44,10 @@ public final class MainActivity extends Activity {
             String text = input.getText().toString().trim();
             if (text.isEmpty()) return;
             output.setText("Thinking...\n");
-            agent.handle(text, result -> runOnUiThread(() -> output.setText(result.toString(2))));
+            agent.handle(text, result -> runOnUiThread(() -> {
+                try { output.setText(result.toString(2)); }
+                catch (JSONException e) { output.setText(result.toString()); }
+            }));
         });
         setContentView(root);
     }
