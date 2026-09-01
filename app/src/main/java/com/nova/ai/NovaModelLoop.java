@@ -4,22 +4,18 @@ import android.content.Context;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Provider -> response parser -> authorized tools. A model never receives direct device access. */
+/** Provider -> response parser -> shared runtime capability execution loop. */
 public final class NovaModelLoop {
     public interface Callback { void onComplete(JSONObject result); }
 
     private final NovaContextStore contextStore;
-    private final NovaToolRegistry registry;
-    private final NovaToolExecutor executor;
+    private final NovaRuntime runtime;
     private NovaAiProvider provider;
 
     public NovaModelLoop(Context context) {
         Context app = context.getApplicationContext();
         contextStore = new NovaContextStore(app);
-        registry = new NovaToolRegistry();
-        registry.register(NovaBuiltInTools.echo());
-        registry.register(NovaBuiltInTools.contextAppend(app));
-        executor = new NovaToolExecutor(app, registry);
+        runtime = NovaRuntime.get(app);
     }
 
     public void setProvider(NovaAiProvider provider) { this.provider = provider; }
@@ -32,7 +28,7 @@ public final class NovaModelLoop {
         String text = input == null ? "" : input.trim();
         NovaAiRequest request = new NovaAiRequest(
                 "You are NOVA. Use only tools in the supplied catalog. Never invent permissions or capabilities.",
-                text, contextStore.recent(), registry.describe());
+                text, contextStore.recent(), runtime.tools().describe());
         provider.complete(request.systemContext, request.userInput, request.toJson(), new NovaAiProvider.Callback() {
             @Override public void onSuccess(JSONObject response) {
                 NovaAiResponse parsed = NovaAiResponse.parse(response);
@@ -42,10 +38,11 @@ public final class NovaModelLoop {
                     JSONObject raw = parsed.toolCalls.optJSONObject(i);
                     if (raw == null) continue;
                     NovaToolCall call = NovaToolCall.fromJson(raw);
-                    execution.put(executor.execute(call.tool, call.input));
+                    execution.put(runtime.executor().execute(call.tool, call.input));
                 }
-                try { result.put("executions", execution); } catch (Exception ignored) { }
+                try { result.put("executions", execution); result.put("ok", true); } catch (Exception ignored) { }
                 contextStore.add("user", text);
+                if (parsed.text != null && !parsed.text.trim().isEmpty()) contextStore.add("assistant", parsed.text);
                 if (callback != null) callback.onComplete(result);
             }
 
