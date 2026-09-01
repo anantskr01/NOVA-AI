@@ -21,13 +21,10 @@ public final class NovaModelLoop {
     public void setProvider(NovaAiProvider provider) { this.provider = provider; }
 
     public void run(String input, Callback callback) {
-        if (provider == null) {
-            fail(callback, "ai_provider_not_configured");
-            return;
-        }
+        if (provider == null) { fail(callback, "ai_provider_not_configured"); return; }
         String text = input == null ? "" : input.trim();
         NovaAiRequest request = new NovaAiRequest(
-                "You are NOVA. Use only tools in the supplied catalog. Never invent permissions or capabilities.",
+                "You are NOVA. Use only tools in the supplied catalog. Never invent permissions or capabilities. Ask for confirmation before sensitive actions.",
                 text, contextStore.recent(), runtime.tools().describe());
         provider.complete(request.systemContext, request.userInput, request.toJson(), new NovaAiProvider.Callback() {
             @Override public void onSuccess(JSONObject response) {
@@ -42,10 +39,9 @@ public final class NovaModelLoop {
                 }
                 try { result.put("executions", execution); result.put("ok", true); } catch (Exception ignored) { }
                 contextStore.add("user", text);
-                if (parsed.text != null && !parsed.text.trim().isEmpty()) contextStore.add("assistant", parsed.text);
+                if (!parsed.text.isEmpty()) contextStore.add("assistant", parsed.text);
                 if (callback != null) callback.onComplete(result);
             }
-
             @Override public void onError(Exception error) {
                 JSONObject result = new JSONObject();
                 try {
