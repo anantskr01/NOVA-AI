@@ -8,6 +8,7 @@ public final class NovaRuntime {
     private static volatile NovaRuntime instance;
     private final Context context;
     private final NovaMemory memory;
+    private final NovaLongTermMemory longTermMemory;
     private final NovaActionEngine actions;
     private final NovaToolRegistry tools;
     private final NovaToolExecutor executor;
@@ -17,12 +18,15 @@ public final class NovaRuntime {
     private NovaRuntime(Context context) {
         this.context = context.getApplicationContext();
         this.memory = new NovaMemory(this.context);
+        this.longTermMemory = new NovaLongTermMemory(this.context);
         this.actions = new NovaActionEngine(this.context);
         this.tools = new NovaToolRegistry();
         this.tools.register(NovaBuiltInTools.echo());
         this.tools.register(NovaBuiltInTools.contextAppend(this.context));
         this.tools.register(new NovaDeviceInfoTool());
         this.tools.register(new NovaAppLauncherTool(this.context));
+        this.tools.register(NovaMemoryTools.remember(this.context));
+        this.tools.register(NovaMemoryTools.recall(this.context));
         this.executor = new NovaToolExecutor(this.context, tools);
     }
 
@@ -34,6 +38,7 @@ public final class NovaRuntime {
     }
 
     public NovaMemory memory() { return memory; }
+    public NovaLongTermMemory longTermMemory() { return longTermMemory; }
     public NovaActionEngine actions() { return actions; }
     public NovaToolRegistry tools() { return tools; }
     public NovaToolExecutor executor() { return executor; }
@@ -45,8 +50,8 @@ public final class NovaRuntime {
                 if (event != null && NovaProtocol.COMMAND.equals(event.optString("type"))) {
                     NovaDeviceCommandHandler handler = commandHandler;
                     if (handler == null) handler = new NovaDeviceCommandHandler(actions, NovaAccessibilityService.getInstance());
-                    final NovaDeviceCommandHandler active = handler;
-                    active.handle(event, result -> sendDeviceEvent(result));
+                    commandHandler = handler;
+                    handler.handle(event, result -> sendDeviceEvent(result));
                 }
                 if (externalListener != null) externalListener.onEvent(event);
             }
