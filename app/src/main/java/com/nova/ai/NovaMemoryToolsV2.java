@@ -12,7 +12,7 @@ public final class NovaMemoryToolsV2 {
         return new NovaTool() {
             public String id() { return "memory.remember"; }
             public String description() { return "Store a useful, non-sensitive fact explicitly provided by the user."; }
-            public JSONObject schema() { return schema("key", "string", "value", "string"); }
+            public JSONObject schema() { return NovaMemoryToolsV2.schema("key", "string", "value", "string"); }
             public JSONObject execute(JSONObject input) throws Exception {
                 String key = input == null ? "" : input.optString("key", "");
                 String value = input == null ? "" : input.optString("value", "");
@@ -25,7 +25,7 @@ public final class NovaMemoryToolsV2 {
         return new NovaTool() {
             public String id() { return "memory.recall"; }
             public String description() { return "Find stored memories relevant to a query."; }
-            public JSONObject schema() { return schema("query", "string"); }
+            public JSONObject schema() { return NovaMemoryToolsV2.schema("query", "string"); }
             public JSONObject execute(JSONObject input) throws Exception {
                 String query = input == null ? "" : input.optString("query", "");
                 return new JSONObject().put("ok", true).put("matches", memory.search(query, 5));
@@ -37,7 +37,7 @@ public final class NovaMemoryToolsV2 {
         return new NovaTool() {
             public String id() { return "memory.forget"; }
             public String description() { return "Delete a stored memory by key."; }
-            public JSONObject schema() { return schema("key", "string"); }
+            public JSONObject schema() { return NovaMemoryToolsV2.schema("key", "string"); }
             public JSONObject execute(JSONObject input) throws Exception { return new JSONObject().put("ok", memory.forget(input == null ? "" : input.optString("key", ""))); }
         };
     }
