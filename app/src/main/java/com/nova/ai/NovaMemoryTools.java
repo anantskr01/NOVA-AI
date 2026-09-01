@@ -12,7 +12,7 @@ public final class NovaMemoryTools {
         return new NovaTool() {
             public String id() { return "memory.remember"; }
             public String description() { return "Store a non-sensitive user-approved fact for future NOVA conversations."; }
-            public JSONObject schema() { return schema("key", "string", "value", "string"); }
+            public JSONObject schema() { return buildSchema("key", "string", "value", "string"); }
             public JSONObject execute(JSONObject input) {
                 JSONObject out = new JSONObject();
                 try {
@@ -30,7 +30,7 @@ public final class NovaMemoryTools {
         return new NovaTool() {
             public String id() { return "memory.recall"; }
             public String description() { return "Recall a previously stored NOVA memory by key."; }
-            public JSONObject schema() { return schema("key", "string"); }
+            public JSONObject schema() { return buildSchema("key", "string"); }
             public JSONObject execute(JSONObject input) {
                 JSONObject out = new JSONObject();
                 try { out.put("value", memory.get(input == null ? "" : input.optString("key", ""))); }
@@ -40,7 +40,7 @@ public final class NovaMemoryTools {
         };
     }
 
-    private static JSONObject schema(String... pairs) {
+    private static JSONObject buildSchema(String... pairs) {
         JSONObject out = new JSONObject();
         try {
             JSONObject properties = new JSONObject();
