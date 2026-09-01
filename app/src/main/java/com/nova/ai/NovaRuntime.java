@@ -14,6 +14,8 @@ public final class NovaRuntime {
     private final NovaToolRegistry tools;
     private final NovaToolExecutor executor;
     private final NovaDeviceRegistry devices;
+    private final NovaTaskOrchestrator orchestrator;
+    private final NovaProductionGuard productionGuard;
     private NovaDeviceGateway gateway;
     private NovaDeviceCommandHandler commandHandler;
 
@@ -25,8 +27,10 @@ public final class NovaRuntime {
         this.actions = new NovaActionEngine(this.context);
         this.tools = new NovaToolRegistry();
         this.devices = new NovaDeviceRegistry();
+        this.orchestrator = new NovaTaskOrchestrator();
         registerBuiltIns();
         this.executor = new NovaToolExecutor(this.context, tools);
+        this.productionGuard = new NovaProductionGuard(this.context);
     }
 
     private void registerBuiltIns() {
@@ -53,6 +57,8 @@ public final class NovaRuntime {
     public NovaToolRegistry tools() { return tools; }
     public NovaToolExecutor executor() { return executor; }
     public NovaDeviceRegistry devices() { return devices; }
+    public NovaTaskOrchestrator orchestrator() { return orchestrator; }
+    public NovaProductionGuard productionGuard() { return productionGuard; }
 
     public synchronized void attachGateway(final NovaDeviceGateway.Listener externalListener) {
         if (gateway != null) return;
