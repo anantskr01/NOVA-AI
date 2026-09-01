@@ -13,6 +13,7 @@ public final class NovaRuntime {
     private final NovaActionEngine actions;
     private final NovaToolRegistry tools;
     private final NovaToolExecutor executor;
+    private final NovaDeviceRegistry devices;
     private NovaDeviceGateway gateway;
     private NovaDeviceCommandHandler commandHandler;
 
@@ -23,6 +24,7 @@ public final class NovaRuntime {
         this.memoryManager = new NovaMemoryManager(this.context);
         this.actions = new NovaActionEngine(this.context);
         this.tools = new NovaToolRegistry();
+        this.devices = new NovaDeviceRegistry();
         registerBuiltIns();
         this.executor = new NovaToolExecutor(this.context, tools);
     }
@@ -50,16 +52,21 @@ public final class NovaRuntime {
     public NovaActionEngine actions() { return actions; }
     public NovaToolRegistry tools() { return tools; }
     public NovaToolExecutor executor() { return executor; }
+    public NovaDeviceRegistry devices() { return devices; }
 
     public synchronized void attachGateway(final NovaDeviceGateway.Listener externalListener) {
         if (gateway != null) return;
         gateway = new NovaDeviceGateway(new NovaDeviceGateway.Listener() {
             @Override public void onEvent(JSONObject event) {
-                if (event != null && NovaProtocol.COMMAND.equals(event.optString("type"))) {
-                    NovaDeviceCommandHandler handler = commandHandler;
-                    if (handler == null) handler = new NovaDeviceCommandHandler(actions, NovaAccessibilityService.getInstance());
-                    commandHandler = handler;
-                    handler.handle(event, result -> sendDeviceEvent(result));
+                if (event != null) {
+                    String node = event.optString("nodeId", event.optString("deviceId", ""));
+                    if (!node.isEmpty()) devices.upsert(node, event.optString("name", node), event.optString("platform", "unknown"), event.optString("state", "CONNECTED"));
+                    if (NovaProtocol.COMMAND.equals(event.optString("type"))) {
+                        NovaDeviceCommandHandler handler = commandHandler;
+                        if (handler == null) handler = new NovaDeviceCommandHandler(actions, NovaAccessibilityService.getInstance());
+                        commandHandler = handler;
+                        handler.handle(event, result -> sendDeviceEvent(result));
+                    }
                 }
                 if (externalListener != null) externalListener.onEvent(event);
             }
