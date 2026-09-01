@@ -21,22 +21,26 @@ public final class NovaRuntime {
         this.longTermMemory = new NovaLongTermMemory(this.context);
         this.actions = new NovaActionEngine(this.context);
         this.tools = new NovaToolRegistry();
-        this.tools.register(NovaBuiltInTools.echo());
-        this.tools.register(NovaBuiltInTools.contextAppend(this.context));
-        this.tools.register(new NovaDeviceInfoTool());
-        this.tools.register(new NovaAppLauncherTool(this.context));
-        this.tools.register(NovaMemoryTools.remember(this.context));
-        this.tools.register(NovaMemoryTools.recall(this.context));
+        registerBuiltIns();
         this.executor = new NovaToolExecutor(this.context, tools);
     }
 
-    public static NovaRuntime get(Context context) {
-        if (instance == null) synchronized (NovaRuntime.class) {
-            if (instance == null) instance = new NovaRuntime(context);
-        }
-        return instance;
+    private void registerBuiltIns() {
+        tools.register(NovaBuiltInTools.echo());
+        tools.register(NovaBuiltInTools.contextAppend(context));
+        tools.register(new NovaDeviceInfoTool());
+        tools.register(new NovaAppLauncherTool(context));
+        tools.register(NovaMemoryTools.remember(context));
+        tools.register(NovaMemoryTools.recall(context));
+        tools.register(new NovaAndroidActionTool(context));
+        tools.register(new NovaWebTool(context));
     }
 
+    public static NovaRuntime get(Context context) {
+        if (context == null) throw new IllegalArgumentException("context");
+        if (instance == null) synchronized (NovaRuntime.class) { if (instance == null) instance = new NovaRuntime(context); }
+        return instance;
+    }
     public NovaMemory memory() { return memory; }
     public NovaLongTermMemory longTermMemory() { return longTermMemory; }
     public NovaActionEngine actions() { return actions; }
@@ -55,12 +59,9 @@ public final class NovaRuntime {
                 }
                 if (externalListener != null) externalListener.onEvent(event);
             }
-            @Override public void onState(String state) {
-                if (externalListener != null) externalListener.onState(state);
-            }
+            @Override public void onState(String state) { if (externalListener != null) externalListener.onState(state); }
         });
     }
-
     public synchronized void setCommandHandler(NovaDeviceCommandHandler handler) { commandHandler = handler; }
     public synchronized boolean sendDeviceEvent(JSONObject event) { return gateway != null && gateway.send(event); }
     public synchronized void connectGateway(String wsUrl) { if (gateway == null) attachGateway(null); gateway.connect(wsUrl); }
