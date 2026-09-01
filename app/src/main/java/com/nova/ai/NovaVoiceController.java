@@ -11,18 +11,17 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
-import androidx.core.content.ContextCompat;
 import java.util.ArrayList;
 import java.util.Locale;
 
-/** Lifecycle-safe voice bridge: speech recognition -> NOVA -> spoken response. */
+/** Lifecycle-safe voice bridge: speech input -> NOVA -> spoken response. */
 public final class NovaVoiceController implements TextToSpeech.OnInitListener {
     public interface Listener { void onState(String state); void onText(String text); void onError(String error); }
     private final Context context; private final NovaAgent agent; private final Listener listener; private final Handler main = new Handler(Looper.getMainLooper());
     private SpeechRecognizer recognizer; private TextToSpeech tts; private boolean ttsReady; private boolean listening; private boolean destroyed;
     public NovaVoiceController(Context context, NovaAgent agent, Listener listener) { this.context=context.getApplicationContext(); this.agent=agent; this.listener=listener; tts=new TextToSpeech(this.context,this); }
     public boolean isListening(){return listening;}
-    public boolean hasAudioPermission(){return ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;}
+    public boolean hasAudioPermission(){return context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;}
     public void startListening(){
         if(destroyed)return; if(!SpeechRecognizer.isRecognitionAvailable(context)){error("speech_unavailable");return;} if(!hasAudioPermission()){error("microphone_permission_required");return;}
         stopListening(); recognizer=SpeechRecognizer.createSpeechRecognizer(context); recognizer.setRecognitionListener(new RecognitionListener(){
