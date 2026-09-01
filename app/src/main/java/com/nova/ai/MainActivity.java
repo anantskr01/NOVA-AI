@@ -35,6 +35,6 @@ public final class MainActivity extends Activity {
         mic.setOnClickListener(v -> { if(voice.isListening()){voice.stopListening();return;} if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC_REQUEST);return;} voice.startListening(); });
         setContentView(root);
     }
-    @Override protected void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==MIC_REQUEST&&grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED&&voice!=null)voice.startListening();}
+    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==MIC_REQUEST&&grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED&&voice!=null)voice.startListening();}
     @Override protected void onDestroy(){if(voice!=null)voice.destroy();super.onDestroy();}
 }
