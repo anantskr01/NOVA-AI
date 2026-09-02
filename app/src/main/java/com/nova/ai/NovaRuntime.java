@@ -29,13 +29,8 @@ public final class NovaRuntime {
         this.memoryManager = new NovaMemoryManager(this.context);
         this.preferences = new NovaPreferenceEngine(this.context);
         this.actions = new NovaActionEngine(this.context);
-
-        // Create and populate the registry before constructing autonomy.
-        // NovaAutonomyEngine no longer calls NovaRuntime.get(), so runtime
-        // initialization cannot recurse back into this constructor.
         this.tools = new NovaToolRegistry();
         registerBuiltIns();
-
         this.devices = new NovaDeviceRegistry();
         this.orchestrator = new NovaTaskOrchestrator();
         this.autonomy = new NovaAutonomyEngine(this.tools);
@@ -54,6 +49,13 @@ public final class NovaRuntime {
         tools.register(NovaMemoryToolsV2.forget(context));
         tools.register(new NovaAndroidActionTool(context));
         tools.register(new NovaWebTool(context));
+        tools.register(NovaCapabilityTools.webSearch());
+        tools.register(NovaCapabilityTools.webFetch());
+        tools.register(NovaCapabilityTools.screenObserve(context));
+        tools.register(NovaCapabilityTools.schedule(context));
+        tools.register(NovaCapabilityTools.listScheduled(context));
+        tools.register(NovaCapabilityTools.cancelScheduled(context));
+        tools.register(NovaCapabilityTools.sendDevice(context));
     }
 
     public static NovaRuntime get(Context context) {
@@ -86,10 +88,7 @@ public final class NovaRuntime {
                 if (event != null) {
                     String node = event.optString("nodeId", event.optString("deviceId", ""));
                     if (!node.isEmpty()) {
-                        devices.upsert(node,
-                                event.optString("name", node),
-                                event.optString("platform", "unknown"),
-                                event.optString("state", "CONNECTED"));
+                        devices.upsert(node, event.optString("name", node), event.optString("platform", "unknown"), event.optString("state", "CONNECTED"));
                     }
                     if (NovaProtocol.COMMAND.equals(event.optString("type"))) {
                         NovaDeviceCommandHandler h = commandHandler;
@@ -102,27 +101,12 @@ public final class NovaRuntime {
                 }
                 if (externalListener != null) externalListener.onEvent(event);
             }
-
-            @Override public void onState(String state) {
-                if (externalListener != null) externalListener.onState(state);
-            }
+            @Override public void onState(String state) { if (externalListener != null) externalListener.onState(state); }
         });
     }
 
-    public synchronized void setCommandHandler(NovaDeviceCommandHandler handler) {
-        commandHandler = handler;
-    }
-
-    public synchronized boolean sendDeviceEvent(JSONObject event) {
-        return gateway != null && gateway.send(event);
-    }
-
-    public synchronized void connectGateway(String wsUrl) {
-        if (gateway == null) attachGateway(null);
-        gateway.connect(wsUrl);
-    }
-
-    public synchronized void disconnectGateway() {
-        if (gateway != null) gateway.disconnect();
-    }
+    public synchronized void setCommandHandler(NovaDeviceCommandHandler handler) { commandHandler = handler; }
+    public synchronized boolean sendDeviceEvent(JSONObject event) { return gateway != null && gateway.send(event); }
+    public synchronized void connectGateway(String wsUrl) { if (gateway == null) attachGateway(null); gateway.connect(wsUrl); }
+    public synchronized void disconnectGateway() { if (gateway != null) gateway.disconnect(); }
 }
