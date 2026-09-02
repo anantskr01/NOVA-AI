@@ -2,6 +2,11 @@ package com.nova.ai;
 
 import android.content.Context;
 import org.json.JSONObject;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /** Single application-level coordinator for local intelligence, tools, memory, autonomy and transport. */
 public final class NovaRuntime {
@@ -19,8 +24,15 @@ public final class NovaRuntime {
     private final NovaAutonomyEngine autonomy;
     private final NovaProductionGuard productionGuard;
     private final NovaUpdateManager updates;
+    private final Map<String, PendingDeviceRequest> pendingDeviceRequests = new ConcurrentHashMap<>();
     private NovaDeviceGateway gateway;
     private NovaDeviceCommandHandler commandHandler;
+    private static final long DEVICE_COMMAND_TIMEOUT_MS = 15000L;
+
+    private static final class PendingDeviceRequest {
+        final CountDownLatch latch = new CountDownLatch(1);
+        volatile JSONObject result;
+    }
 
     private NovaRuntime(Context context) {
         this.context = context.getApplicationContext();
@@ -86,11 +98,20 @@ public final class NovaRuntime {
         gateway = new NovaDeviceGateway(new NovaDeviceGateway.Listener() {
             @Override public void onEvent(JSONObject event) {
                 if (event != null) {
+                    String type = event.optString("type", "");
+                    if (NovaProtocol.RESULT.equals(type)) {
+                        String requestId = event.optString("requestId", "");
+                        PendingDeviceRequest pending = pendingDeviceRequests.get(requestId);
+                        if (pending != null) {
+                            pending.result = event;
+                            pending.latch.countDown();
+                        }
+                    }
                     String node = event.optString("nodeId", event.optString("deviceId", ""));
                     if (!node.isEmpty()) {
                         devices.upsert(node, event.optString("name", node), event.optString("platform", "unknown"), event.optString("state", "CONNECTED"));
                     }
-                    if (NovaProtocol.COMMAND.equals(event.optString("type"))) {
+                    if (NovaProtocol.COMMAND.equals(type)) {
                         NovaDeviceCommandHandler h = commandHandler;
                         if (h == null) {
                             h = new NovaDeviceCommandHandler(actions, NovaAccessibilityService.getInstance());
@@ -107,6 +128,36 @@ public final class NovaRuntime {
 
     public synchronized void setCommandHandler(NovaDeviceCommandHandler handler) { commandHandler = handler; }
     public synchronized boolean sendDeviceEvent(JSONObject event) { return gateway != null && gateway.send(event); }
+
+    /** Sends a command and waits for the matching node.result, with a hard timeout. */
+    public JSONObject sendDeviceCommandAndWait(String nodeId, String action, String value) throws Exception {
+        if (nodeId == null || nodeId.trim().isEmpty()) throw new IllegalArgumentException("nodeId_required");
+        if (action == null || action.trim().isEmpty()) throw new IllegalArgumentException("action_required");
+        if (devices.get(nodeId) == null) throw new IllegalArgumentException("unknown_device");
+        String requestId = UUID.randomUUID().toString();
+        PendingDeviceRequest pending = new PendingDeviceRequest();
+        pendingDeviceRequests.put(requestId, pending);
+        try {
+            JSONObject event = new JSONObject()
+                    .put("v", NovaProtocol.VERSION)
+                    .put("type", NovaProtocol.COMMAND)
+                    .put("id", requestId)
+                    .put("requestId", requestId)
+                    .put("nodeId", nodeId)
+                    .put("action", action.trim())
+                    .put("value", value == null ? "" : value);
+            if (!sendDeviceEvent(event)) throw new IllegalStateException("device_not_connected");
+            if (!pending.latch.await(DEVICE_COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                throw new IllegalStateException("device_command_timeout");
+            }
+            JSONObject result = pending.result;
+            if (result == null) throw new IllegalStateException("device_result_missing");
+            return result;
+        } finally {
+            pendingDeviceRequests.remove(requestId);
+        }
+    }
+
     public synchronized void connectGateway(String wsUrl) { if (gateway == null) attachGateway(null); gateway.connect(wsUrl); }
     public synchronized void disconnectGateway() { if (gateway != null) gateway.disconnect(); }
 }
