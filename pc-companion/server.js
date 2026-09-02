@@ -1,0 +1,63 @@
+import { WebSocketServer, WebSocket } from 'ws';
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import process from 'node:process';
+
+const port = Number(process.env.NOVA_PORT || 8765);
+const nodeId = process.env.NOVA_NODE_ID || `pc-${randomUUID()}`;
+const version = '0.1.0';
+const wss = new WebSocketServer({ port });
+
+const apps = {
+  notepad: process.platform === 'win32' ? ['notepad.exe', []] : null,
+  calculator: process.platform === 'win32' ? ['calc.exe', []] : null,
+  explorer: process.platform === 'win32' ? ['explorer.exe', []] : null,
+  terminal: process.platform === 'win32' ? ['cmd.exe', []] : null
+};
+
+function send(ws, payload) {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+}
+function result(requestId, ok, message, extra = {}) {
+  return { v: '1', type: 'node.result', id: randomUUID(), requestId, ok, message, ...extra };
+}
+function openUrl(value) {
+  if (!/^https?:\/\//i.test(value)) return false;
+  if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', value], { detached: true, stdio: 'ignore' }).unref();
+  else if (process.platform === 'darwin') spawn('open', [value], { detached: true, stdio: 'ignore' }).unref();
+  else spawn('xdg-open', [value], { detached: true, stdio: 'ignore' }).unref();
+  return true;
+}
+function openApp(value) {
+  const entry = apps[String(value || '').toLowerCase()];
+  if (!entry) return false;
+  spawn(entry[0], entry[1], { detached: true, stdio: 'ignore' }).unref();
+  return true;
+}
+
+wss.on('connection', ws => {
+  send(ws, {
+    v: '1', type: 'node.hello', id: randomUUID(), nodeId,
+    name: process.env.NOVA_NODE_NAME || 'NOVA PC', platform: 'pc', version,
+    state: 'CONNECTED', capabilities: ['open_url', 'open_app', 'media']
+  });
+
+  ws.on('message', raw => {
+    let event;
+    try { event = JSON.parse(raw.toString()); } catch { return; }
+    if (event.type !== 'node.command') return;
+    const requestId = event.id || event.requestId || '';
+    const action = String(event.action || '').trim().toLowerCase();
+    const value = String(event.value || '');
+    let ok = false;
+    let message = 'Unsupported or failed PC action.';
+    try {
+      if (action === 'open_url') { ok = openUrl(value); message = ok ? 'URL opened.' : 'Invalid URL.'; }
+      else if (action === 'open_app') { ok = openApp(value); message = ok ? 'Application opened.' : 'Application is not in the PC allowlist.'; }
+    } catch (error) { message = String(error?.message || error); }
+    send(ws, result(requestId, ok, message, { nodeId }));
+  });
+});
+
+console.log(`NOVA PC companion listening on ws://0.0.0.0:${port}`);
+console.log(`nodeId=${nodeId}`);
