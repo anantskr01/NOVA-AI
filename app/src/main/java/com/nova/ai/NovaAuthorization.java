@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import org.json.JSONObject;
 
-/** Explicit capability gate for agent tools. */
+/** Explicit capability gate for agent tools. Safe observation/research primitives are enabled by default. */
 public final class NovaAuthorization {
     private static final String PREFS = "nova_capabilities";
     private final SharedPreferences prefs;
@@ -15,7 +15,11 @@ public final class NovaAuthorization {
 
     public boolean isAllowed(String toolId) {
         if (toolId == null || toolId.trim().isEmpty()) return false;
-        if (toolId.equals("nova.echo") || toolId.equals("memory.append_context") || toolId.equals("android.open_app") || toolId.equals("android.action")) return true;
+        if (toolId.equals("nova.echo") || toolId.equals("memory.append_context")
+                || toolId.equals("android.open_app") || toolId.equals("android.action")
+                || toolId.equals("web.search") || toolId.equals("web.fetch")
+                || toolId.equals("screen.observe") || toolId.equals("task.schedule")
+                || toolId.equals("task.list") || toolId.equals("task.cancel_scheduled")) return true;
         return prefs.getBoolean("allow_" + toolId, false);
     }
 
