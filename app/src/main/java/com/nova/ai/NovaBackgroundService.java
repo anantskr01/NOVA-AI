@@ -11,7 +11,7 @@ import android.os.IBinder;
 /** Executes scheduled NOVA prompts in a bounded foreground service. */
 public final class NovaBackgroundService extends Service {
     public static final String EXTRA_TASK_ID="taskId"; private static final int NOTIFICATION_ID=7301; private static final String CHANNEL="nova_background";
-    @Override public void onCreate(){super.onCreate();createChannel();}
+    @Override public void onCreate(){super.onCreate();}
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         String taskId=intent==null?"":intent.getStringExtra(EXTRA_TASK_ID);startForeground(NOTIFICATION_ID,notification("NOVA is running a scheduled task"));
         if(taskId==null||taskId.trim().isEmpty()){stopSelf(startId);return START_NOT_STICKY;}
