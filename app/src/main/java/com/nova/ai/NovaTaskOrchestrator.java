@@ -3,10 +3,17 @@ package com.nova.ai;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Deterministic bounded task orchestration primitives used by higher-level agent flows. */
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+/** Bounded task orchestration primitives used by higher-level NOVA agent flows. */
 public final class NovaTaskOrchestrator {
     public interface StepExecutor { JSONObject execute(String tool, JSONObject input); }
+    private final ExecutorService parallelPool = Executors.newFixedThreadPool(4);
 
+    /** Execute a dependent sequence in order. */
     public JSONObject execute(JSONArray steps, StepExecutor executor) {
         JSONObject result = new JSONObject();
         JSONArray results = new JSONArray();
@@ -40,4 +47,61 @@ public final class NovaTaskOrchestrator {
             catch (Exception ignored) { return result; }
         }
     }
+
+    /**
+     * Execute independent tasks from one agent turn concurrently. Results retain input order.
+     * The caller is responsible for putting only independent work in this batch.
+     */
+    public JSONArray executeParallel(JSONArray steps, StepExecutor executor) {
+        JSONArray results = new JSONArray();
+        if (steps == null || executor == null || steps.length() == 0) return results;
+
+        final int count = Math.min(steps.length(), NovaAgentPolicy.MAX_STEPS);
+        final JSONObject[] slots = new JSONObject[count];
+        final CountDownLatch latch = new CountDownLatch(count);
+        for (int i = 0; i < count; i++) {
+            final int index = i;
+            final JSONObject step = steps.optJSONObject(i);
+            parallelPool.execute(() -> {
+                try {
+                    if (step == null) {
+                        slots[index] = new JSONObject().put("ok", false).put("error", "invalid_step");
+                        return;
+                    }
+                    String tool = step.optString("tool", "").trim();
+                    JSONObject output = tool.isEmpty()
+                            ? new JSONObject().put("ok", false).put("error", "missing_tool")
+                            : executor.execute(tool, step.optJSONObject("input"));
+                    if (output == null) output = new JSONObject().put("ok", false).put("error", "null_tool_result");
+                    slots[index] = new JSONObject()
+                            .put("id", step.optString("id", ""))
+                            .put("step", index)
+                            .put("tool", tool)
+                            .put("result", output);
+                } catch (Exception e) {
+                    try { slots[index] = new JSONObject().put("id", step == null ? "" : step.optString("id", ""))
+                            .put("step", index).put("tool", step == null ? "" : step.optString("tool", ""))
+                            .put("result", new JSONObject().put("ok", false).put("error", "task_exception").put("message", String.valueOf(e.getMessage()))); }
+                    catch (Exception ignored) { }
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        try { latch.await(NovaAgentPolicy.MAX_TASK_MILLIS, TimeUnit.MILLISECONDS); }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+
+        for (int i = 0; i < count; i++) {
+            if (slots[i] != null) results.put(slots[i]);
+            else {
+                try { results.put(new JSONObject().put("id", steps.optJSONObject(i) == null ? "" : steps.optJSONObject(i).optString("id", ""))
+                        .put("step", i).put("tool", steps.optJSONObject(i) == null ? "" : steps.optJSONObject(i).optString("tool", ""))
+                        .put("result", new JSONObject().put("ok", false).put("error", "task_timeout"))); }
+                catch (Exception ignored) { }
+            }
+        }
+        return results;
+    }
+
+    public void shutdown() { parallelPool.shutdownNow(); }
 }
