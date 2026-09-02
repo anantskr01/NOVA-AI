@@ -15,7 +15,7 @@ public final class NovaAuthorization {
 
     public boolean isAllowed(String toolId) {
         if (toolId == null || toolId.trim().isEmpty()) return false;
-        if (toolId.equals("nova.echo") || toolId.equals("memory.append_context") || toolId.equals("android.open_app")) return true;
+        if (toolId.equals("nova.echo") || toolId.equals("memory.append_context") || toolId.equals("android.open_app") || toolId.equals("android.action")) return true;
         return prefs.getBoolean("allow_" + toolId, false);
     }
 
