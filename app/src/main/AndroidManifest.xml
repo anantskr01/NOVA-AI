@@ -14,10 +14,7 @@
 
     <application android:theme="@style/AppTheme" android:label="NOVA AI" android:allowBackup="true">
         <activity android:name=".MainActivity" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <service android:name=".NovaAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
@@ -27,5 +24,6 @@
         <service android:name=".NovaWakeService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".NovaBackgroundService" android:exported="false" android:foregroundServiceType="dataSync" />
         <receiver android:name=".NovaScheduleReceiver" android:exported="false" />
+        <receiver android:name=".NovaBootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>
     </application>
 </manifest>
