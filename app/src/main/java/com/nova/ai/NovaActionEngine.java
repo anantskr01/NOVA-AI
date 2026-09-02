@@ -29,6 +29,7 @@ public final class NovaActionEngine {
                     Intent app = context.getPackageManager().getLaunchIntentForPackage(value.trim()); if (app == null) return false;
                     app.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(app); return true;
                 case "click_text": return s != null && s.clickText(value);
+                case "type_text": return s != null && s.typeText(value);
                 case "scroll_up": return s != null && s.swipe(0, -350);
                 case "scroll_down": return s != null && s.swipe(0, 350);
                 case "swipe_left": return s != null && s.swipe(-350, 0);
