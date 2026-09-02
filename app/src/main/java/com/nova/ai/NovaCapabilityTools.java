@@ -1,6 +1,7 @@
 package com.nova.ai;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.os.Build;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -18,92 +19,31 @@ public final class NovaCapabilityTools {
     private NovaCapabilityTools() { }
 
     public static NovaTool webSearch() { return new NovaTool() {
-        public String id() { return "web.search"; }
-        public String description() { return "Search the public web and return a small set of titles, URLs and snippets for research."; }
-        public JSONObject schema() { try { return new JSONObject().put("type","object").put("required",new JSONArray().put("query")).put("properties",new JSONObject().put("query",new JSONObject().put("type","string")).put("max_results",new JSONObject().put("type","integer"))); } catch(Exception e){return new JSONObject();} }
-        public JSONObject execute(JSONObject input) throws Exception {
-            String query=input==null?"":input.optString("query","").trim();
-            if(query.isEmpty()) throw new IllegalArgumentException("query_required");
-            if(query.length()>512) throw new IllegalArgumentException("query_too_long");
-            int max=Math.max(1,Math.min(8,input.optInt("max_results",5)));
-            String url="https://api.duckduckgo.com/?q="+URLEncoder.encode(query,"UTF-8")+"&format=json&no_html=1&no_redirect=1";
-            JSONObject data=getJson(url);
-            JSONArray results=new JSONArray();
-            JSONObject heading=new JSONObject().put("title",data.optString("Heading","")).put("url",data.optString("AbstractURL","")).put("snippet",data.optString("AbstractText",""));
-            if(!heading.optString("url").isEmpty()) results.put(heading);
-            addTopics(data.optJSONArray("RelatedTopics"),results,max);
-            return new JSONObject().put("query",query).put("results",results).put("source","DuckDuckGo Instant Answer");
-        }
-    }; }
+        public String id(){return "web.search";} public String description(){return "Search the public web and return a small set of titles, URLs and snippets for research.";}
+        public JSONObject schema(){try{return new JSONObject().put("type","object").put("required",new JSONArray().put("query")).put("properties",new JSONObject().put("query",new JSONObject().put("type","string")).put("max_results",new JSONObject().put("type","integer")));}catch(Exception e){return new JSONObject();}}
+        public JSONObject execute(JSONObject input)throws Exception{String query=input==null?"":input.optString("query","").trim();if(query.isEmpty())throw new IllegalArgumentException("query_required");if(query.length()>512)throw new IllegalArgumentException("query_too_long");int max=Math.max(1,Math.min(8,input.optInt("max_results",5)));String url="https://api.duckduckgo.com/?q="+URLEncoder.encode(query,"UTF-8")+"&format=json&no_html=1&no_redirect=1";JSONObject data=getJson(url);JSONArray results=new JSONArray();JSONObject heading=new JSONObject().put("title",data.optString("Heading","")).put("url",data.optString("AbstractURL","")).put("snippet",data.optString("AbstractText",""));if(!heading.optString("url").isEmpty())results.put(heading);addTopics(data.optJSONArray("RelatedTopics"),results,max);return new JSONObject().put("query",query).put("results",results).put("source","DuckDuckGo Instant Answer");}
+    };}
 
     public static NovaTool webFetch() { return new NovaTool() {
-        public String id(){return "web.fetch";}
-        public String description(){return "Fetch a public HTTP/HTTPS page and return bounded readable text for research.";}
+        public String id(){return "web.fetch";} public String description(){return "Fetch a public HTTP/HTTPS page and return bounded readable text for research.";}
         public JSONObject schema(){try{return new JSONObject().put("type","object").put("required",new JSONArray().put("url")).put("properties",new JSONObject().put("url",new JSONObject().put("type","string")));}catch(Exception e){return new JSONObject();}}
-        public JSONObject execute(JSONObject input)throws Exception{
-            String url=input==null?"":input.optString("url","").trim();
-            java.net.URI uri=java.net.URI.create(url);
-            if(!("http".equalsIgnoreCase(uri.getScheme())||"https".equalsIgnoreCase(uri.getScheme()))||uri.getHost()==null)throw new IllegalArgumentException("valid_http_url_required");
-            HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection(); c.setRequestMethod("GET"); c.setConnectTimeout(10000); c.setReadTimeout(20000); c.setRequestProperty("User-Agent","NOVA-AI/0.3");
-            int code=c.getResponseCode(); InputStream stream=code>=200&&code<300?c.getInputStream():c.getErrorStream(); String body=read(stream,12000); c.disconnect();
-            if(code<200||code>=300)throw new IllegalStateException("web_http_"+code);
-            return new JSONObject().put("url",url).put("status",code).put("text",stripHtml(body));
-        }
-    }; }
+        public JSONObject execute(JSONObject input)throws Exception{String url=input==null?"":input.optString("url","").trim();java.net.URI uri=java.net.URI.create(url);if(!("http".equalsIgnoreCase(uri.getScheme())||"https".equalsIgnoreCase(uri.getScheme()))||uri.getHost()==null)throw new IllegalArgumentException("valid_http_url_required");HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(20000);c.setRequestProperty("User-Agent","NOVA-AI/0.3");int code=c.getResponseCode();InputStream stream=code>=200&&code<300?c.getInputStream():c.getErrorStream();String body=read(stream,12000);c.disconnect();if(code<200||code>=300)throw new IllegalStateException("web_http_"+code);return new JSONObject().put("url",url).put("status",code).put("text",stripHtml(body));}
+    };}
 
     public static NovaTool screenObserve(Context context){return new NovaTool(){
-        public String id(){return "screen.observe";}
-        public String description(){return "Observe the active Android screen through the accessibility tree, including visible text, clickable controls and bounds.";}
+        public String id(){return "screen.observe";} public String description(){return "Observe the active Android screen through accessibility and, when supported, a fresh screenshot OCR pass.";}
         public JSONObject schema(){try{return new JSONObject().put("type","object").put("properties",new JSONObject().put("query",new JSONObject().put("type","string")));}catch(Exception e){return new JSONObject();}}
-        public JSONObject execute(JSONObject input)throws Exception{
-            NovaAccessibilityService s=NovaAccessibilityService.getInstance();
-            if(s==null)throw new IllegalStateException("accessibility_service_unavailable");
-            String text=s.screenText(); String ui=s.uiSnapshot(); String q=input==null?"":input.optString("query","").trim();
-            JSONObject out=new JSONObject().put("text",NovaAgentPolicy.bounded(text,7000)).put("ui",NovaAgentPolicy.bounded(ui,9000));
-            if(!q.isEmpty()) out.put("contains",text.toLowerCase().contains(q.toLowerCase())||ui.toLowerCase().contains(q.toLowerCase()));
-            if(Build.VERSION.SDK_INT>=30) out.put("visual_capture_available",true); else out.put("visual_capture_available",false);
-            return out;
-        }
+        public JSONObject execute(JSONObject input)throws Exception{NovaAccessibilityService s=NovaAccessibilityService.getInstance();if(s==null)throw new IllegalStateException("accessibility_service_unavailable");String text=s.screenText(),ui=s.uiSnapshot(),q=input==null?"":input.optString("query","").trim();JSONObject out=new JSONObject().put("text",NovaAgentPolicy.bounded(text,7000)).put("ui",NovaAgentPolicy.bounded(ui,9000));if(!q.isEmpty())out.put("contains",text.toLowerCase().contains(q.toLowerCase())||ui.toLowerCase().contains(q.toLowerCase()));if(Build.VERSION.SDK_INT>=30){out.put("visual_capture_available",true);Bitmap shot=s.captureScreen(1800);if(shot!=null){final Object lock=new Object();final String[] ocr={""};final boolean[] done={false};NovaOcrAnalyzer.recognize(shot,new NovaOcrAnalyzer.Callback(){public void onText(String value){synchronized(lock){ocr[0]=value;done[0]=true;lock.notifyAll();}}public void onError(Exception error){synchronized(lock){done[0]=true;lock.notifyAll();}}});synchronized(lock){if(!done[0])try{lock.wait(1800);}catch(InterruptedException e){Thread.currentThread().interrupt();}}out.put("screenshot_ocr",NovaAgentPolicy.bounded(ocr[0],7000));shot.recycle();}}else out.put("visual_capture_available",false);return out;}
     };}
 
     public static NovaTool schedule(Context context){return new NovaTool(){
-        public String id(){return "task.schedule";}
-        public String description(){return "Schedule a NOVA prompt for a future time. Use epoch milliseconds for triggerAt.";}
+        public String id(){return "task.schedule";} public String description(){return "Schedule a NOVA prompt for a future time. Use epoch milliseconds for triggerAt.";}
         public JSONObject schema(){try{return new JSONObject().put("type","object").put("required",new JSONArray().put("prompt").put("triggerAt")).put("properties",new JSONObject().put("prompt",new JSONObject().put("type","string")).put("triggerAt",new JSONObject().put("type","integer")).put("repeatEveryMs",new JSONObject().put("type","integer")).put("execute",new JSONObject().put("type","boolean")));}catch(Exception e){return new JSONObject();}}
-        public JSONObject execute(JSONObject input)throws Exception{
-            String prompt=input==null?"":input.optString("prompt","").trim(); long at=input==null?0:input.optLong("triggerAt",0); long repeat=input==null?0:input.optLong("repeatEveryMs",0); boolean execute=input!=null&&input.optBoolean("execute",true);
-            if(prompt.isEmpty())throw new IllegalArgumentException("prompt_required"); if(at<=System.currentTimeMillis())throw new IllegalArgumentException("trigger_must_be_in_future"); if(repeat!=0&&repeat<60000)throw new IllegalArgumentException("repeat_too_short");
-            String id=NovaProtocol.id(); new NovaScheduledTaskStore(context).put(id,prompt,execute); NovaScheduler scheduler=new NovaScheduler(context);
-            if(repeat>0)scheduler.repeat(id,at,repeat);else scheduler.schedule(id,at);
-            return new JSONObject().put("scheduled",true).put("taskId",id).put("triggerAt",at).put("repeatEveryMs",repeat);
-        }
+        public JSONObject execute(JSONObject input)throws Exception{String prompt=input==null?"":input.optString("prompt","").trim();long at=input==null?0:input.optLong("triggerAt",0);long repeat=input==null?0:input.optLong("repeatEveryMs",0);boolean execute=input!=null&&input.optBoolean("execute",true);if(prompt.isEmpty())throw new IllegalArgumentException("prompt_required");if(at<=System.currentTimeMillis())throw new IllegalArgumentException("trigger_must_be_in_future");if(repeat!=0&&repeat<60000)throw new IllegalArgumentException("repeat_too_short");String id=NovaProtocol.id();new NovaScheduledTaskStore(context).put(id,prompt,execute);NovaScheduler scheduler=new NovaScheduler(context);if(repeat>0)scheduler.repeat(id,at,repeat);else scheduler.schedule(id,at);return new JSONObject().put("scheduled",true).put("taskId",id).put("triggerAt",at).put("repeatEveryMs",repeat);}
     };}
-
-    public static NovaTool listScheduled(Context context){return new NovaTool(){
-        public String id(){return "task.list";} public String description(){return "List persistent NOVA scheduled tasks.";}
-        public JSONObject schema(){return new JSONObject();} public JSONObject execute(JSONObject input){try{return new JSONObject().put("tasks",new NovaScheduledTaskStore(context).list());}catch(Exception e){return new JSONObject();}}
-    };}
-
-    public static NovaTool cancelScheduled(Context context){return new NovaTool(){
-        public String id(){return "task.cancel_scheduled";}
-        public String description(){return "Cancel a persistent scheduled NOVA task by taskId.";}
-        public JSONObject schema(){try{return new JSONObject().put("type","object").put("required",new JSONArray().put("taskId")).put("properties",new JSONObject().put("taskId",new JSONObject().put("type","string")));}catch(Exception e){return new JSONObject();}}
-        public JSONObject execute(JSONObject input){String id=input==null?"":input.optString("taskId","").trim();if(id.isEmpty())throw new IllegalArgumentException("taskId_required");new NovaScheduler(context).cancel(id);new NovaScheduledTaskStore(context).remove(id);return new JSONObject().put("cancelled",true).put("taskId",id);}
-    };}
-
-    public static NovaTool sendDevice(Context context){return new NovaTool(){
-        public String id(){return "device.send_command";}
-        public String description(){return "Send a bounded action command to a connected NOVA node such as a PC companion or another Android device.";}
-        public JSONObject schema(){try{return new JSONObject().put("type","object").put("required",new JSONArray().put("nodeId").put("action")).put("properties",new JSONObject().put("nodeId",new JSONObject().put("type","string")).put("action",new JSONObject().put("type","string")).put("value",new JSONObject().put("type","string")));}catch(Exception e){return new JSONObject();}}
-        public JSONObject execute(JSONObject input)throws Exception{
-            String node=input==null?"":input.optString("nodeId","").trim(); String action=input==null?"":input.optString("action","").trim(); String value=input==null?"":input.optString("value","");
-            if(node.isEmpty()||action.isEmpty())throw new IllegalArgumentException("nodeId_and_action_required"); if(value.length()>2048)throw new IllegalArgumentException("value_too_long");
-            NovaRuntime runtime=NovaRuntime.get(context); NovaDeviceRegistry.Device device=runtime.devices().get(node); if(device==null)throw new IllegalArgumentException("unknown_device");
-            JSONObject event=new JSONObject().put("v",NovaProtocol.VERSION).put("type",NovaProtocol.COMMAND).put("id",NovaProtocol.id()).put("nodeId",node).put("action",action).put("value",value);
-            boolean sent=runtime.sendDeviceEvent(event); return new JSONObject().put("sent",sent).put("nodeId",node).put("action",action);
-        }
-    };}
-
+    public static NovaTool listScheduled(Context context){return new NovaTool(){public String id(){return "task.list";}public String description(){return "List persistent NOVA scheduled tasks.";}public JSONObject schema(){return new JSONObject();}public JSONObject execute(JSONObject input){try{return new JSONObject().put("tasks",new NovaScheduledTaskStore(context).list());}catch(Exception e){return new JSONObject();}}};}
+    public static NovaTool cancelScheduled(Context context){return new NovaTool(){public String id(){return "task.cancel_scheduled";}public String description(){return "Cancel a persistent scheduled NOVA task by taskId.";}public JSONObject schema(){try{return new JSONObject().put("type","object").put("required",new JSONArray().put("taskId")).put("properties",new JSONObject().put("taskId",new JSONObject().put("type","string")));}catch(Exception e){return new JSONObject();}}public JSONObject execute(JSONObject input){String id=input==null?"":input.optString("taskId","").trim();if(id.isEmpty())throw new IllegalArgumentException("taskId_required");new NovaScheduler(context).cancel(id);new NovaScheduledTaskStore(context).remove(id);return new JSONObject().put("cancelled",true).put("taskId",id);}};}
+    public static NovaTool sendDevice(Context context){return new NovaTool(){public String id(){return "device.send_command";}public String description(){return "Send a bounded action command to a connected NOVA node such as a PC companion or another Android device.";}public JSONObject schema(){try{return new JSONObject().put("type","object").put("required",new JSONArray().put("nodeId").put("action")).put("properties",new JSONObject().put("nodeId",new JSONObject().put("type","string")).put("action",new JSONObject().put("type","string")).put("value",new JSONObject().put("type","string")));}catch(Exception e){return new JSONObject();}}public JSONObject execute(JSONObject input)throws Exception{String node=input==null?"":input.optString("nodeId","").trim();String action=input==null?"":input.optString("action","").trim();String value=input==null?"":input.optString("value","");if(node.isEmpty()||action.isEmpty())throw new IllegalArgumentException("nodeId_and_action_required");if(value.length()>2048)throw new IllegalArgumentException("value_too_long");NovaRuntime runtime=NovaRuntime.get(context);NovaDeviceRegistry.Device device=runtime.devices().get(node);if(device==null)throw new IllegalArgumentException("unknown_device");JSONObject event=new JSONObject().put("v",NovaProtocol.VERSION).put("type",NovaProtocol.COMMAND).put("id",NovaProtocol.id()).put("nodeId",node).put("action",action).put("value",value);boolean sent=runtime.sendDeviceEvent(event);return new JSONObject().put("sent",sent).put("nodeId",node).put("action",action);}};}
     private static JSONObject getJson(String url)throws Exception{HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setRequestProperty("User-Agent","NOVA-AI/0.3");int code=c.getResponseCode();String body=read(code>=200&&code<300?c.getInputStream():c.getErrorStream(),16000);c.disconnect();if(code<200||code>=300)throw new IllegalStateException("search_http_"+code);return new JSONObject(body);}
     private static void addTopics(JSONArray topics,JSONArray out,int max){if(topics==null)return;for(int i=0;i<topics.length()&&out.length()<max;i++){JSONObject t=topics.optJSONObject(i);if(t==null)continue;if(t.has("Topics")){addTopics(t.optJSONArray("Topics"),out,max);continue;}String first=t.optString("FirstURL","");String text=t.optString("Text","");if(!first.isEmpty())try{out.put(new JSONObject().put("title",text).put("url",first).put("snippet",text));}catch(Exception ignored){}}}
     private static String read(InputStream stream,int max)throws Exception{if(stream==null)return"";StringBuilder out=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(stream,StandardCharsets.UTF_8))){String line;while((line=r.readLine())!=null&&out.length()<max)out.append(line).append('\n');}return out.substring(0,Math.min(out.length(),max));}
