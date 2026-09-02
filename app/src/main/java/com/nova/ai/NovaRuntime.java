@@ -28,136 +28,22 @@ public final class NovaRuntime {
     private NovaDeviceGateway gateway;
     private NovaDeviceCommandHandler commandHandler;
     private static final long DEVICE_COMMAND_TIMEOUT_MS = 15000L;
-
-    private static final class PendingDeviceRequest {
-        final CountDownLatch latch = new CountDownLatch(1);
-        volatile JSONObject result;
+    private static final class PendingDeviceRequest { final CountDownLatch latch=new CountDownLatch(1); volatile JSONObject result; }
+    private NovaRuntime(Context context){this.context=context.getApplicationContext();memory=new NovaMemory(this.context);longTermMemory=new NovaLongTermMemory(this.context);memoryManager=new NovaMemoryManager(this.context);preferences=new NovaPreferenceEngine(this.context);actions=new NovaActionEngine(this.context);tools=new NovaToolRegistry();devices=new NovaDeviceRegistry();orchestrator=new NovaTaskOrchestrator();registerBuiltIns();autonomy=new NovaAutonomyEngine(this.tools);executor=new NovaToolExecutor(this.context,tools);productionGuard=new NovaProductionGuard(this.context);updates=new NovaUpdateManager(this.context);}
+    private void registerBuiltIns(){
+        tools.register(NovaBuiltInTools.echo()); tools.register(NovaBuiltInTools.contextAppend(context)); tools.register(new NovaDeviceInfoTool()); tools.register(new NovaAppLauncherTool(context));
+        tools.register(NovaMemoryToolsV2.remember(context)); tools.register(NovaMemoryToolsV2.recall(context)); tools.register(NovaMemoryToolsV2.forget(context));
+        tools.register(new NovaAndroidActionTool(context)); tools.register(new NovaWebTool(context)); tools.register(NovaCapabilityTools.webSearch()); tools.register(NovaCapabilityTools.webFetch()); tools.register(NovaCapabilityTools.screenObserve(context));
+        tools.register(NovaCapabilityTools.schedule(context)); tools.register(NovaCapabilityTools.listScheduled(context)); tools.register(NovaCapabilityTools.cancelScheduled(context)); tools.register(NovaCapabilityTools.sendDevice(context));
+        tools.register(NovaFeatureTools.memorySearch(context)); tools.register(NovaFeatureTools.notifications(context)); tools.register(NovaFeatureTools.devices(context)); tools.register(NovaFeatureTools.research(context)); tools.register(NovaFeatureTools.systemStatus(context));
     }
-
-    private NovaRuntime(Context context) {
-        this.context = context.getApplicationContext();
-        this.memory = new NovaMemory(this.context);
-        this.longTermMemory = new NovaLongTermMemory(this.context);
-        this.memoryManager = new NovaMemoryManager(this.context);
-        this.preferences = new NovaPreferenceEngine(this.context);
-        this.actions = new NovaActionEngine(this.context);
-        this.tools = new NovaToolRegistry();
-        registerBuiltIns();
-        this.devices = new NovaDeviceRegistry();
-        this.orchestrator = new NovaTaskOrchestrator();
-        this.autonomy = new NovaAutonomyEngine(this.tools);
-        this.executor = new NovaToolExecutor(this.context, tools);
-        this.productionGuard = new NovaProductionGuard(this.context);
-        this.updates = new NovaUpdateManager(this.context);
-    }
-
-    private void registerBuiltIns() {
-        tools.register(NovaBuiltInTools.echo());
-        tools.register(NovaBuiltInTools.contextAppend(context));
-        tools.register(new NovaDeviceInfoTool());
-        tools.register(new NovaAppLauncherTool(context));
-        tools.register(NovaMemoryToolsV2.remember(context));
-        tools.register(NovaMemoryToolsV2.recall(context));
-        tools.register(NovaMemoryToolsV2.forget(context));
-        tools.register(new NovaAndroidActionTool(context));
-        tools.register(new NovaWebTool(context));
-        tools.register(NovaCapabilityTools.webSearch());
-        tools.register(NovaCapabilityTools.webFetch());
-        tools.register(NovaCapabilityTools.screenObserve(context));
-        tools.register(NovaCapabilityTools.schedule(context));
-        tools.register(NovaCapabilityTools.listScheduled(context));
-        tools.register(NovaCapabilityTools.cancelScheduled(context));
-        tools.register(NovaCapabilityTools.sendDevice(context));
-    }
-
-    public static NovaRuntime get(Context context) {
-        if (context == null) throw new IllegalArgumentException("context");
-        if (instance == null) {
-            synchronized (NovaRuntime.class) {
-                if (instance == null) instance = new NovaRuntime(context);
-            }
-        }
-        return instance;
-    }
-
-    public NovaMemory memory() { return memory; }
-    public NovaLongTermMemory longTermMemory() { return longTermMemory; }
-    public NovaMemoryManager memoryManager() { return memoryManager; }
-    public NovaPreferenceEngine preferences() { return preferences; }
-    public NovaActionEngine actions() { return actions; }
-    public NovaToolRegistry tools() { return tools; }
-    public NovaToolExecutor executor() { return executor; }
-    public NovaDeviceRegistry devices() { return devices; }
-    public NovaTaskOrchestrator orchestrator() { return orchestrator; }
-    public NovaAutonomyEngine autonomy() { return autonomy; }
-    public NovaProductionGuard productionGuard() { return productionGuard; }
-    public NovaUpdateManager updates() { return updates; }
-
-    public synchronized void attachGateway(final NovaDeviceGateway.Listener externalListener) {
-        if (gateway != null) return;
-        gateway = new NovaDeviceGateway(new NovaDeviceGateway.Listener() {
-            @Override public void onEvent(JSONObject event) {
-                if (event != null) {
-                    String type = event.optString("type", "");
-                    if (NovaProtocol.RESULT.equals(type)) {
-                        String requestId = event.optString("requestId", "");
-                        PendingDeviceRequest pending = pendingDeviceRequests.get(requestId);
-                        if (pending != null) {
-                            pending.result = event;
-                            pending.latch.countDown();
-                        }
-                    }
-                    String node = event.optString("nodeId", event.optString("deviceId", ""));
-                    if (!node.isEmpty()) {
-                        devices.upsert(node, event.optString("name", node), event.optString("platform", "unknown"), event.optString("state", "CONNECTED"));
-                    }
-                    if (NovaProtocol.COMMAND.equals(type)) {
-                        NovaDeviceCommandHandler h = commandHandler;
-                        if (h == null) {
-                            h = new NovaDeviceCommandHandler(actions, NovaAccessibilityService.getInstance());
-                            commandHandler = h;
-                        }
-                        h.handle(event, result -> sendDeviceEvent(result));
-                    }
-                }
-                if (externalListener != null) externalListener.onEvent(event);
-            }
-            @Override public void onState(String state) { if (externalListener != null) externalListener.onState(state); }
-        });
-    }
-
-    public synchronized void setCommandHandler(NovaDeviceCommandHandler handler) { commandHandler = handler; }
-    public synchronized boolean sendDeviceEvent(JSONObject event) { return gateway != null && gateway.send(event); }
-
-    /** Sends a command and waits for the matching node.result, with a hard timeout. */
-    public JSONObject sendDeviceCommandAndWait(String nodeId, String action, String value) throws Exception {
-        if (nodeId == null || nodeId.trim().isEmpty()) throw new IllegalArgumentException("nodeId_required");
-        if (action == null || action.trim().isEmpty()) throw new IllegalArgumentException("action_required");
-        if (devices.get(nodeId) == null) throw new IllegalArgumentException("unknown_device");
-        String requestId = UUID.randomUUID().toString();
-        PendingDeviceRequest pending = new PendingDeviceRequest();
-        pendingDeviceRequests.put(requestId, pending);
-        try {
-            JSONObject event = new JSONObject()
-                    .put("v", NovaProtocol.VERSION)
-                    .put("type", NovaProtocol.COMMAND)
-                    .put("id", requestId)
-                    .put("requestId", requestId)
-                    .put("nodeId", nodeId)
-                    .put("action", action.trim())
-                    .put("value", value == null ? "" : value);
-            if (!sendDeviceEvent(event)) throw new IllegalStateException("device_not_connected");
-            if (!pending.latch.await(DEVICE_COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                throw new IllegalStateException("device_command_timeout");
-            }
-            JSONObject result = pending.result;
-            if (result == null) throw new IllegalStateException("device_result_missing");
-            return result;
-        } finally {
-            pendingDeviceRequests.remove(requestId);
-        }
-    }
-
-    public synchronized void connectGateway(String wsUrl) { if (gateway == null) attachGateway(null); gateway.connect(wsUrl); }
-    public synchronized void disconnectGateway() { if (gateway != null) gateway.disconnect(); }
+    public static NovaRuntime get(Context context){if(context==null)throw new IllegalArgumentException("context");if(instance==null){synchronized(NovaRuntime.class){if(instance==null)instance=new NovaRuntime(context);}}return instance;}
+    public NovaMemory memory(){return memory;} public NovaLongTermMemory longTermMemory(){return longTermMemory;} public NovaMemoryManager memoryManager(){return memoryManager;} public NovaPreferenceEngine preferences(){return preferences;} public NovaActionEngine actions(){return actions;} public NovaToolRegistry tools(){return tools;} public NovaToolExecutor executor(){return executor;} public NovaDeviceRegistry devices(){return devices;} public NovaTaskOrchestrator orchestrator(){return orchestrator;} public NovaAutonomyEngine autonomy(){return autonomy;} public NovaProductionGuard productionGuard(){return productionGuard;} public NovaUpdateManager updates(){return updates;}
+    public synchronized void attachGateway(final NovaDeviceGateway.Listener externalListener){if(gateway!=null)return;gateway=new NovaDeviceGateway(new NovaDeviceGateway.Listener(){
+        @Override public void onEvent(JSONObject event){if(event!=null){String type=event.optString("type","");if(NovaProtocol.RESULT.equals(type)){String requestId=event.optString("requestId","");PendingDeviceRequest pending=pendingDeviceRequests.get(requestId);if(pending!=null){pending.result=event;pending.latch.countDown();}}String node=event.optString("nodeId",event.optString("deviceId",""));if(!node.isEmpty())devices.upsert(node,event.optString("name",node),event.optString("platform","unknown"),event.optString("state","CONNECTED"));if(NovaProtocol.COMMAND.equals(type)){NovaDeviceCommandHandler h=commandHandler;if(h==null){h=new NovaDeviceCommandHandler(actions,NovaAccessibilityService.getInstance());commandHandler=h;}h.handle(event,result->sendDeviceEvent(result));}}if(externalListener!=null)externalListener.onEvent(event);}
+        @Override public void onState(String state){if(externalListener!=null)externalListener.onState(state);}
+    });}
+    public synchronized void setCommandHandler(NovaDeviceCommandHandler handler){commandHandler=handler;} public synchronized boolean sendDeviceEvent(JSONObject event){return gateway!=null&&gateway.send(event);}
+    public JSONObject sendDeviceCommandAndWait(String nodeId,String action,String value)throws Exception{if(nodeId==null||nodeId.trim().isEmpty())throw new IllegalArgumentException("nodeId_required");if(action==null||action.trim().isEmpty())throw new IllegalArgumentException("action_required");if(devices.get(nodeId)==null)throw new IllegalArgumentException("unknown_device");String requestId=UUID.randomUUID().toString();PendingDeviceRequest pending=new PendingDeviceRequest();pendingDeviceRequests.put(requestId,pending);try{JSONObject event=new JSONObject().put("v",NovaProtocol.VERSION).put("type",NovaProtocol.COMMAND).put("id",requestId).put("requestId",requestId).put("nodeId",nodeId).put("action",action.trim()).put("value",value==null?"":value);if(!sendDeviceEvent(event))throw new IllegalStateException("device_not_connected");if(!pending.latch.await(DEVICE_COMMAND_TIMEOUT_MS,TimeUnit.MILLISECONDS))throw new IllegalStateException("device_command_timeout");if(pending.result==null)throw new IllegalStateException("device_result_missing");return pending.result;}finally{pendingDeviceRequests.remove(requestId);}}
+    public synchronized void connectGateway(String wsUrl){if(gateway==null)attachGateway(null);gateway.connect(wsUrl);} public synchronized void disconnectGateway(){if(gateway!=null)gateway.disconnect();}
 }
