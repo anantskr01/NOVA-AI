@@ -4,7 +4,7 @@ import android.content.Context;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Provider -> response parser -> bounded multi-step task execution with cancellation and recovery. */
+/** Provider -> response parser -> bounded multi-step task execution with cancellation, recovery and vision context. */
 public final class NovaModelLoop {
     public interface Callback { void onComplete(JSONObject result); }
     private static final int MAX_STEPS = 8;
@@ -42,7 +42,7 @@ public final class NovaModelLoop {
             finish(userText, executions, "max_steps_reached", callback, "I stopped after reaching the task step limit.", state); return;
         }
         NovaAiRequest request = new NovaAiRequest(
-                "You are NOVA, a reliable Android agent. Use only tools in the supplied catalog. Never invent permissions or capabilities. Ask for confirmation before sensitive actions. For complex tasks, observe the screen before acting, execute the smallest useful action, then verify the result with screen.observe or a specific result. If a tool fails, diagnose and retry with corrected arguments when safe. You may return multiple independent tool calls in one response; dependent actions must be separate turns. Use web.search then web.fetch for research and synthesize multiple sources. Use device.send_command only for a connected trusted node. Stop when the task is complete.",
+                "You are NOVA, a reliable Android agent. Use only tools in the supplied catalog. Never invent permissions or capabilities. Ask for confirmation before sensitive actions. For complex tasks, observe the screen before acting, execute the smallest useful action, then verify the result with screen.observe or a specific result. When screen.observe provides a screenshot, inspect the image as well as OCR/UI text. If a tool fails, diagnose and retry with corrected arguments when safe. You may return multiple independent tool calls in one response; dependent actions must be separate turns. Use web.search then web.fetch for research and synthesize multiple sources. Use device.send_command only for a connected trusted node. Stop when the task is complete.",
                 userText, context, runtime.tools().describe());
         provider.complete(request.systemContext, request.userInput, request.toJson(), new NovaAiProvider.Callback() {
             @Override public void onSuccess(JSONObject response) {
@@ -76,7 +76,17 @@ public final class NovaModelLoop {
                     for(int i=0;i<batch.length();i++){
                         JSONObject item=batch.optJSONObject(i);if(item==null)continue;JSONObject execution=item.optJSONObject("result");if(execution==null)execution=new JSONObject().put("ok",false).put("error","missing_execution_result");
                         executions.put(new JSONObject().put("id",item.optString("id")).put("tool",item.optString("tool")).put("execution",execution));
-                        nextContext.put(new JSONObject().put("role","tool").put("tool_call_id",item.optString("id")).put("name",item.optString("tool")).put("content",NovaAgentPolicy.bounded(execution.toString(),NovaAgentPolicy.MAX_TOOL_RESULT_CHARS)));
+                        JSONObject toolContext=new JSONObject().put("role","tool").put("tool_call_id",item.optString("id")).put("name",item.optString("tool"));
+                        String image=execution.optString("screenshot_image","");
+                        if(!image.isEmpty()) {
+                            JSONObject withoutImage=new JSONObject(execution.toString());
+                            withoutImage.remove("screenshot_image");
+                            toolContext.put("content",NovaAgentPolicy.bounded(withoutImage.toString(),NovaAgentPolicy.MAX_TOOL_RESULT_CHARS));
+                            toolContext.put("vision_image",image);
+                        } else {
+                            toolContext.put("content",NovaAgentPolicy.bounded(execution.toString(),NovaAgentPolicy.MAX_TOOL_RESULT_CHARS));
+                        }
+                        nextContext.put(toolContext);
                     }
                     state.advance(); requestNext(userText,nextContext,executions,state,callback);
                 } catch(Exception e){state.fail(e.getMessage());finish(userText,executions,"execution_error",callback,"NOVA could not complete the task safely.",state);}
