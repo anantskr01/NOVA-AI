@@ -8,7 +8,7 @@ public final class NovaAndroidActionTool implements NovaTool {
     private final NovaActionEngine actions;
     public NovaAndroidActionTool(Context context) { actions = new NovaActionEngine(context); }
     @Override public String id() { return "android.action"; }
-    @Override public String description() { return "Perform an explicitly requested Android action such as home, back, recents, notifications, settings, scrolling, opening a package, or opening a URL."; }
+    @Override public String description() { return "Interact with Android using permission-controlled actions: navigation, app/package launch, URLs, scrolling, swipes, clicking visible text and typing into an editable field."; }
     @Override public JSONObject schema() {
         try {
             return new JSONObject().put("type", "object")
@@ -22,7 +22,7 @@ public final class NovaAndroidActionTool implements NovaTool {
         String action = input == null ? "" : input.optString("action", "").trim().toLowerCase();
         String value = input == null ? "" : input.optString("value", "");
         if (!isSupported(action)) throw new IllegalArgumentException("unsupported_android_action");
-        if (value.length() > 2048) throw new IllegalArgumentException("value_too_long");
+        if (value.length() > 4096) throw new IllegalArgumentException("value_too_long");
         if ("open_url".equals(action) && !(value.startsWith("https://") || value.startsWith("http://"))) throw new IllegalArgumentException("http_url_required");
         boolean ok = actions.execute(action, value);
         return new JSONObject().put("action", action).put("success", ok);
@@ -31,6 +31,6 @@ public final class NovaAndroidActionTool implements NovaTool {
         return "home".equals(a) || "back".equals(a) || "recents".equals(a) || "notifications".equals(a)
                 || "quick_settings".equals(a) || "scroll_up".equals(a) || "scroll_down".equals(a)
                 || "swipe_left".equals(a) || "swipe_right".equals(a) || "click_text".equals(a)
-                || "open_url".equals(a) || "open_package".equals(a) || "settings".equals(a);
+                || "type_text".equals(a) || "open_url".equals(a) || "open_package".equals(a) || "settings".equals(a);
     }
 }
