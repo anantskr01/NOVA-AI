@@ -1,11 +1,13 @@
 import { WebSocketServer, WebSocket } from 'ws';
+import screenshot from 'screenshot-desktop';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 
 const port = Number(process.env.NOVA_PORT || 8765);
 const nodeId = process.env.NOVA_NODE_ID || `pc-${randomUUID()}`;
-const version = '0.1.0';
+const version = '0.2.0';
+const MAX_SCREENSHOT_BYTES = 2_000_000;
 const wss = new WebSocketServer({ port });
 
 const apps = {
@@ -34,15 +36,21 @@ function openApp(value) {
   spawn(entry[0], entry[1], { detached: true, stdio: 'ignore' }).unref();
   return true;
 }
+async function captureScreen() {
+  const image = await screenshot({ format: 'jpg' });
+  if (!Buffer.isBuffer(image) || image.length === 0) throw new Error('empty_screenshot');
+  if (image.length > MAX_SCREENSHOT_BYTES) throw new Error('screenshot_too_large');
+  return image.toString('base64');
+}
 
 wss.on('connection', ws => {
   send(ws, {
     v: '1', type: 'node.hello', id: randomUUID(), nodeId,
     name: process.env.NOVA_NODE_NAME || 'NOVA PC', platform: 'pc', version,
-    state: 'CONNECTED', capabilities: ['open_url', 'open_app', 'media']
+    state: 'CONNECTED', capabilities: ['open_url', 'open_app', 'screen_capture']
   });
 
-  ws.on('message', raw => {
+  ws.on('message', async raw => {
     let event;
     try { event = JSON.parse(raw.toString()); } catch { return; }
     if (event.type !== 'node.command') return;
@@ -51,11 +59,24 @@ wss.on('connection', ws => {
     const value = String(event.value || '');
     let ok = false;
     let message = 'Unsupported or failed PC action.';
+    let extra = { nodeId };
     try {
-      if (action === 'open_url') { ok = openUrl(value); message = ok ? 'URL opened.' : 'Invalid URL.'; }
-      else if (action === 'open_app') { ok = openApp(value); message = ok ? 'Application opened.' : 'Application is not in the PC allowlist.'; }
-    } catch (error) { message = String(error?.message || error); }
-    send(ws, result(requestId, ok, message, { nodeId }));
+      if (action === 'open_url') {
+        ok = openUrl(value);
+        message = ok ? 'URL opened.' : 'Invalid URL.';
+      } else if (action === 'open_app') {
+        ok = openApp(value);
+        message = ok ? 'Application opened.' : 'Application is not in the PC allowlist.';
+      } else if (action === 'screen_capture') {
+        extra.screenshot_image = await captureScreen();
+        extra.mimeType = 'image/jpeg';
+        ok = true;
+        message = 'Screen captured.';
+      }
+    } catch (error) {
+      message = String(error?.message || error);
+    }
+    send(ws, result(requestId, ok, message, extra));
   });
 });
 
