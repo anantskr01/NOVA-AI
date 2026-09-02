@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import org.json.JSONObject;
 
-/** Explicit capability gate for agent tools. Dangerous capabilities are never implicitly enabled. */
+/** Explicit capability gate for agent tools. */
 public final class NovaAuthorization {
     private static final String PREFS = "nova_capabilities";
     private final SharedPreferences prefs;
@@ -15,7 +15,7 @@ public final class NovaAuthorization {
 
     public boolean isAllowed(String toolId) {
         if (toolId == null || toolId.trim().isEmpty()) return false;
-        if (toolId.equals("nova.echo") || toolId.equals("memory.append_context")) return true;
+        if (toolId.equals("nova.echo") || toolId.equals("memory.append_context") || toolId.equals("android.open_app")) return true;
         return prefs.getBoolean("allow_" + toolId, false);
     }
 
@@ -26,10 +26,8 @@ public final class NovaAuthorization {
 
     public JSONObject check(String toolId) {
         JSONObject result = new JSONObject();
-        try {
-            result.put("tool", toolId == null ? "" : toolId);
-            result.put("allowed", isAllowed(toolId));
-        } catch (Exception ignored) { }
+        try { result.put("tool", toolId == null ? "" : toolId).put("allowed", isAllowed(toolId)); }
+        catch (Exception ignored) { }
         return result;
     }
 }
