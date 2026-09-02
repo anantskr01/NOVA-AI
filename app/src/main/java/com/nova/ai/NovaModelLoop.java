@@ -77,12 +77,21 @@ public final class NovaModelLoop {
                         JSONObject item=batch.optJSONObject(i);if(item==null)continue;JSONObject execution=item.optJSONObject("result");if(execution==null)execution=new JSONObject().put("ok",false).put("error","missing_execution_result");
                         executions.put(new JSONObject().put("id",item.optString("id")).put("tool",item.optString("tool")).put("execution",execution));
                         JSONObject toolContext=new JSONObject().put("role","tool").put("tool_call_id",item.optString("id")).put("name",item.optString("tool"));
-                        String image=execution.optString("screenshot_image","");
+
+                        // device.send_command wraps the remote node.result inside {result:{...}}.
+                        // Accept both local screenshot.observe and remote screen_capture results.
+                        JSONObject visualSource = execution;
+                        JSONObject nestedResult = execution.optJSONObject("result");
+                        if (nestedResult != null) visualSource = nestedResult;
+                        String image=visualSource.optString("screenshot_image","");
                         if(!image.isEmpty()) {
                             JSONObject withoutImage=new JSONObject(execution.toString());
                             withoutImage.remove("screenshot_image");
+                            JSONObject cleanNested=withoutImage.optJSONObject("result");
+                            if(cleanNested!=null) cleanNested.remove("screenshot_image");
                             toolContext.put("content",NovaAgentPolicy.bounded(withoutImage.toString(),NovaAgentPolicy.MAX_TOOL_RESULT_CHARS));
                             toolContext.put("vision_image",image);
+                            toolContext.put("vision_mime",visualSource.optString("mimeType","image/jpeg"));
                         } else {
                             toolContext.put("content",NovaAgentPolicy.bounded(execution.toString(),NovaAgentPolicy.MAX_TOOL_RESULT_CHARS));
                         }
