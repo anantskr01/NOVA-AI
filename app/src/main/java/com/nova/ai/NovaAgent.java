@@ -54,6 +54,13 @@ public final class NovaAgent {
         if (callback != null) callback.onComplete(executeLocal(text));
     }
 
+    /** Compatibility entry point for the legacy conversation engine. */
+    public JSONObject plan(String request) {
+        final JSONObject[] holder = new JSONObject[1];
+        handle(request, result -> holder[0] = result);
+        return holder[0] == null ? errorResult("Unable to produce a plan.") : holder[0];
+    }
+
     private JSONObject executeLocal(String text) {
         JSONObject result = new JSONObject();
         try {
@@ -71,7 +78,10 @@ public final class NovaAgent {
             String app=requestedApp(text); if(app!=null)return openApp(result,app);
             if(lower.equals("help")||lower.startsWith("what can you do"))return result.put("ok",true).put("mode","local").put("text","With the AI provider connected, I can reason over natural language, research the web, observe the screen, control apps, schedule tasks and coordinate trusted devices.");
             return result.put("ok",true).put("mode","local").put("text","I heard you: "+text+". Connect an AI provider for general natural-language execution.");
-        }catch(Exception e){return result.put("ok",false).put("error",e.getClass().getSimpleName()).put("text","NOVA couldn't complete that request.");}
+        }catch(Exception e){
+            try { return result.put("ok",false).put("error",e.getClass().getSimpleName()).put("text","NOVA couldn't complete that request."); }
+            catch(Exception ignored){ return result; }
+        }
     }
 
     private JSONObject openApp(JSONObject result,String packageName)throws Exception{JSONObject execution=runtime.executor().execute("android.open_app",new JSONObject().put("package",packageName));JSONObject output=execution.optJSONObject("output");boolean ok=execution.optBoolean("ok",false)&&output!=null&&output.optBoolean("opened",false);return result.put("ok",ok).put("mode","local").put("text",ok?"Opening the app.":"I couldn't open that app. Make sure it is installed and NOVA has permission.").put("execution",execution);}
@@ -79,4 +89,5 @@ public final class NovaAgent {
     private static String requestedApp(String text){String lower=text.toLowerCase().trim();if(!(lower.startsWith("open ")||lower.startsWith("launch ")||lower.startsWith("start ")))return null;String name=lower.replaceFirst("^(open|launch|start)\\s+","").trim();if(name.equals("youtube")||name.equals("you tube"))return"com.google.android.youtube";if(name.equals("chrome")||name.equals("google chrome"))return"com.android.chrome";if(name.equals("gmail"))return"com.google.android.gm";if(name.equals("maps")||name.equals("google maps"))return"com.google.android.apps.maps";if(name.equals("spotify"))return"com.spotify.music";return null;}
     private static String normalize(String request){String text=request==null?"":request.trim();String lower=text.toLowerCase();if(lower.startsWith("hey nova"))return text.substring(8).trim();if(lower.startsWith("nova"))return text.substring(4).trim();return text;}
     private static void finish(Callback callback,boolean ok,String text){if(callback==null)return;JSONObject result=new JSONObject();try{result.put("ok",ok).put("text",text);}catch(Exception ignored){}callback.onComplete(result);}
+    private static JSONObject errorResult(String text){JSONObject result=new JSONObject();try{result.put("ok",false).put("error","plan_failed").put("text",text);}catch(Exception ignored){}return result;}
 }
