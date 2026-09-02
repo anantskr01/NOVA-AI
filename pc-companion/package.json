@@ -1,0 +1,10 @@
+{
+  "name": "nova-pc-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bounded NOVA PC companion node",
+  "type": "module",
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}
