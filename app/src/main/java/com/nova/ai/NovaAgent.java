@@ -37,8 +37,8 @@ public final class NovaAgent {
             if (lower.equals("hi") || lower.equals("hello") || lower.equals("hey"))
                 return result.put("ok", true).put("mode", "local").put("text", "Hello. NOVA is online and ready.");
             if (lower.startsWith("remember ")) {
-                String memory = text.substring(9).trim();
-                JSONObject out = runtime.executor().execute("memory.remember", new JSONObject().put("text", memory));
+                String value = text.substring(9).trim();
+                JSONObject out = runtime.executor().execute("memory.remember", new JSONObject().put("key", "user_fact_" + System.currentTimeMillis()).put("value", value));
                 boolean ok = out.optBoolean("ok", false);
                 return result.put("ok", ok).put("mode", "local").put("text", ok ? "I'll remember that." : "I couldn't save that memory.").put("execution", out);
             }
