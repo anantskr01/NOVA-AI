@@ -4,81 +4,11 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 
-const port = Number(process.env.NOVA_PORT || 8765);
-const nodeId = process.env.NOVA_NODE_ID || `pc-${randomUUID()}`;
-const version = '0.2.0';
-const MAX_SCREENSHOT_BYTES = 2_000_000;
-const wss = new WebSocketServer({ port });
-
-const apps = {
-  notepad: process.platform === 'win32' ? ['notepad.exe', []] : null,
-  calculator: process.platform === 'win32' ? ['calc.exe', []] : null,
-  explorer: process.platform === 'win32' ? ['explorer.exe', []] : null,
-  terminal: process.platform === 'win32' ? ['cmd.exe', []] : null
-};
-
-function send(ws, payload) {
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
-}
-function result(requestId, ok, message, extra = {}) {
-  return { v: '1', type: 'node.result', id: randomUUID(), requestId, ok, message, ...extra };
-}
-function openUrl(value) {
-  if (!/^https?:\/\//i.test(value)) return false;
-  if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', value], { detached: true, stdio: 'ignore' }).unref();
-  else if (process.platform === 'darwin') spawn('open', [value], { detached: true, stdio: 'ignore' }).unref();
-  else spawn('xdg-open', [value], { detached: true, stdio: 'ignore' }).unref();
-  return true;
-}
-function openApp(value) {
-  const entry = apps[String(value || '').toLowerCase()];
-  if (!entry) return false;
-  spawn(entry[0], entry[1], { detached: true, stdio: 'ignore' }).unref();
-  return true;
-}
-async function captureScreen() {
-  const image = await screenshot({ format: 'jpg' });
-  if (!Buffer.isBuffer(image) || image.length === 0) throw new Error('empty_screenshot');
-  if (image.length > MAX_SCREENSHOT_BYTES) throw new Error('screenshot_too_large');
-  return image.toString('base64');
-}
-
-wss.on('connection', ws => {
-  send(ws, {
-    v: '1', type: 'node.hello', id: randomUUID(), nodeId,
-    name: process.env.NOVA_NODE_NAME || 'NOVA PC', platform: 'pc', version,
-    state: 'CONNECTED', capabilities: ['open_url', 'open_app', 'screen_capture']
-  });
-
-  ws.on('message', async raw => {
-    let event;
-    try { event = JSON.parse(raw.toString()); } catch { return; }
-    if (event.type !== 'node.command') return;
-    const requestId = event.id || event.requestId || '';
-    const action = String(event.action || '').trim().toLowerCase();
-    const value = String(event.value || '');
-    let ok = false;
-    let message = 'Unsupported or failed PC action.';
-    let extra = { nodeId };
-    try {
-      if (action === 'open_url') {
-        ok = openUrl(value);
-        message = ok ? 'URL opened.' : 'Invalid URL.';
-      } else if (action === 'open_app') {
-        ok = openApp(value);
-        message = ok ? 'Application opened.' : 'Application is not in the PC allowlist.';
-      } else if (action === 'screen_capture') {
-        extra.screenshot_image = await captureScreen();
-        extra.mimeType = 'image/jpeg';
-        ok = true;
-        message = 'Screen captured.';
-      }
-    } catch (error) {
-      message = String(error?.message || error);
-    }
-    send(ws, result(requestId, ok, message, extra));
-  });
-});
-
-console.log(`NOVA PC companion listening on ws://0.0.0.0:${port}`);
-console.log(`nodeId=${nodeId}`);
+const port=Number(process.env.NOVA_PORT||8765);const nodeId=process.env.NOVA_NODE_ID||`pc-${randomUUID()}`;const version='1.0.0';const authToken=String(process.env.NOVA_TOKEN||'');const MAX_SCREENSHOT_BYTES=2_000_000;const wss=new WebSocketServer({port});
+const apps={notepad:process.platform==='win32'?['notepad.exe',[]]:null,calculator:process.platform==='win32'?['calc.exe',[]]:null,explorer:process.platform==='win32'?['explorer.exe',[]]:null,terminal:process.platform==='win32'?['cmd.exe',[]]:null};
+function send(ws,payload){if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(payload));}function result(requestId,ok,message,extra={}){return{v:'1',type:'node.result',id:randomUUID(),requestId,ok,message,nodeId,...extra};}
+function openUrl(value){if(!/^https?:\/\//i.test(value))return false;if(process.platform==='win32')spawn('cmd',['/c','start','',value],{detached:true,stdio:'ignore'}).unref();else if(process.platform==='darwin')spawn('open',[value],{detached:true,stdio:'ignore'}).unref();else spawn('xdg-open',[value],{detached:true,stdio:'ignore'}).unref();return true;}
+function openApp(value){const e=apps[String(value||'').toLowerCase()];if(!e)return false;spawn(e[0],e[1],{detached:true,stdio:'ignore'}).unref();return true;}
+async function captureScreen(){const image=await screenshot({format:'jpg'});if(!Buffer.isBuffer(image)||image.length===0)throw new Error('empty_screenshot');if(image.length>MAX_SCREENSHOT_BYTES)throw new Error('screenshot_too_large');return image.toString('base64');}
+wss.on('connection',ws=>{let authenticated=authToken.length===0;send(ws,{v:'1',type:'node.hello',id:randomUUID(),nodeId,name:process.env.NOVA_NODE_NAME||'NOVA PC',platform:'pc',version,state:'CONNECTED',authRequired:!authenticated,capabilities:['open_url','open_app','screen_capture']});ws.on('message',async raw=>{let event;try{event=JSON.parse(raw.toString());}catch{return;}if(event.type==='node.hello'&&authToken){authenticated=event.authToken===authToken;if(!authenticated){send(ws,result(event.id,false,'Node pairing token rejected.'));ws.close();}return;}if(!authenticated||event.type!=='node.command')return;const requestId=event.id||event.requestId||'';const action=String(event.action||'').trim().toLowerCase();const value=String(event.value||'');let ok=false;let message='Unsupported or failed PC action.';let extra={};try{if(action==='open_url'){ok=openUrl(value);message=ok?'URL opened.':'Invalid URL.';}else if(action==='open_app'){ok=openApp(value);message=ok?'Application opened.':'Application is not in the PC allowlist.';}else if(action==='screen_capture'){extra.screenshot_image=await captureScreen();extra.mimeType='image/jpeg';ok=true;message='Screen captured.';}}catch(error){message=String(error?.message||error);}send(ws,result(requestId,ok,message,extra));});});
+console.log(`NOVA PC companion listening on ws://0.0.0.0:${port}`);console.log(`nodeId=${nodeId}`);console.log(`pairing=${authToken?'enabled':'disabled'}`);
